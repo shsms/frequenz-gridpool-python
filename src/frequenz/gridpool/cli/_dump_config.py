@@ -43,6 +43,17 @@ def _format_value(value: Any) -> Any:
         # tomlkit.integer() just does int(raw), dropping underscores; build
         # the Integer item directly instead.
         return Integer(value, Trivia(), f"{value:_d}")
+    if isinstance(value, list) and any(isinstance(entry, dict) for entry in value):
+        # tomlkit turns a plain list of dicts into an array-of-tables, which
+        # cannot sit on a dotted key; build an array of inline tables instead.
+        array = tomlkit.array()
+        for entry in value:
+            table = tomlkit.inline_table()
+            for key, entry_value in entry.items():
+                if not _is_empty(entry_value):
+                    table[key] = entry_value
+            array.append(table)
+        return array
     return value
 
 

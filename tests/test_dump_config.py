@@ -7,7 +7,12 @@ import tomllib
 
 from frequenz.gridpool import MicrogridConfig
 from frequenz.gridpool.cli._dump_config import dump_map
-from frequenz.gridpool.config.microgrid import ComponentTypeConfig, Metadata, PVConfig
+from frequenz.gridpool.config.microgrid import (
+    ComponentTypeConfig,
+    ComponentUnitConfig,
+    Metadata,
+    PVConfig,
+)
 
 
 def test_dump_map_round_trips() -> None:
@@ -59,3 +64,33 @@ def test_dump_map_renders_whole_floats_as_underscored_ints() -> None:
     assert "10.pv.1.rated_power = 1_400_000\n" in text
     # Genuinely fractional floats are left alone.
     assert "10.meta.latitude = 52.5\n" in text
+
+
+def test_dump_map_renders_units_as_inline_tables() -> None:
+    """`units` render as an array of inline tables and parse back intact."""
+    configs = {
+        "10": MicrogridConfig(
+            meta=Metadata(microgrid_id=10),
+            ctype={
+                "battery": ComponentTypeConfig(
+                    units=[
+                        ComponentUnitConfig(inverter=201, component=[301, 302]),
+                        ComponentUnitConfig(inverter=202, component=[303]),
+                    ]
+                ),
+            },
+        )
+    }
+
+    text = dump_map(configs)
+
+    assert (
+        "10.ctype.battery.units = "
+        "[{inverter = 201, component = [301, 302]}, "
+        "{inverter = 202, component = [303]}]\n" in text
+    )
+    parsed = tomllib.loads(text)
+    assert parsed["10"]["ctype"]["battery"]["units"] == [
+        {"inverter": 201, "component": [301, 302]},
+        {"inverter": 202, "component": [303]},
+    ]

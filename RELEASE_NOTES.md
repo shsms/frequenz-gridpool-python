@@ -14,6 +14,8 @@
 
 * When `units` is set and `inverter` or `component` is not, the missing list is filled in from the units. Explicitly given lists are checked against the units: a unit naming an unknown inverter or component is an error, and a component not wired to any inverter logs a warning.
 
+* The `generate-config` CLI command writes `units` as an array of inline tables, both when printing and when patching with `--inplace`.
+
 ## Bug Fixes
 
 <!-- Here goes notable bug fixes that are worth a special mention or explanation -->

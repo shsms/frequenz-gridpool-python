@@ -6,6 +6,7 @@
 from frequenz.gridpool.cli._patch_config import patch_text
 from frequenz.gridpool.config.microgrid import (
     ComponentTypeConfig,
+    ComponentUnitConfig,
     Metadata,
     MicrogridConfig,
     PVConfig,
@@ -121,3 +122,35 @@ def test_patch_formats_new_numeric_leaves() -> None:
     patched = patch_text(_ORIGINAL, configs)
 
     assert "5555.meta.enterprise_id = 1_234_567\n" in patched
+
+
+def test_patch_inserts_missing_units() -> None:
+    """A config gaining `units` has them patched in as inline tables."""
+    original = (
+        "40.meta.microgrid_id = 40\n"
+        "40.ctype.battery.inverter = [201, 202]\n"
+        "40.ctype.battery.component = [301, 302, 303]\n"
+    )
+    configs = {
+        "40": MicrogridConfig(
+            meta=Metadata(microgrid_id=40),
+            ctype={
+                "battery": ComponentTypeConfig(
+                    units=[
+                        ComponentUnitConfig(inverter=201, component=[301, 302]),
+                        ComponentUnitConfig(inverter=202, component=[303]),
+                    ]
+                ),
+            },
+        )
+    }
+
+    patched = patch_text(original, configs)
+
+    # Existing lines survive untouched; the units leaf is added.
+    assert "40.ctype.battery.inverter = [201, 202]\n" in patched
+    assert (
+        "40.ctype.battery.units = "
+        "[{inverter = 201, component = [301, 302]}, "
+        "{inverter = 202, component = [303]}]\n" in patched
+    )
