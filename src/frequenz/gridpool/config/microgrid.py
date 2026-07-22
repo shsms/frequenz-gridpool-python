@@ -26,6 +26,25 @@ ComponentCategory = Literal["meter", "inverter", "component"]
 
 
 @dataclass
+class ComponentUnitConfig:
+    """One inverter and the components wired to it.
+
+    A unit keeps the wiring explicit, so consumers can pair an inverter
+    with its components without guessing from the order of the flat ID
+    lists in `ComponentTypeConfig`.
+    """
+
+    inverter: int
+    """ID of the inverter of this unit."""
+
+    component: list[int] = field(default_factory=list)
+    """IDs of the components wired to this inverter, e.g. battery packs.
+
+    Empty if the inverter has no components connected to it.
+    """
+
+
+@dataclass
 class ComponentTypeConfig:
     """Configuration of a microgrid component type."""
 
@@ -41,13 +60,59 @@ class ComponentTypeConfig:
     formula: dict[str, str] | None = None
     """Formula to calculate the power of this component."""
 
+    units: list[ComponentUnitConfig] | None = None
+    """Inverter-to-component wiring, one entry per inverter.
+
+    This is the authoritative pairing: consumers that need to know which
+    components belong to which inverter must read it from here, not guess
+    it from the order of the `inverter` and `component` lists.
+
+    When `units` is set and `inverter` or `component` is not, the missing
+    list is filled in from the units.
+    """
+
     def __post_init__(self) -> None:
-        """Set the default formula if none is provided."""
+        """Set the default formula and reconcile `units` with the ID lists."""
         self.formula = self.formula or {}
         if "AC_ACTIVE_POWER" in self.formula:
             _logger.warning(
                 "ComponentTypeConfig: 'AC_ACTIVE_POWER' formula is deprecated, "
                 "please use 'AC_POWER_ACTIVE' instead."
+            )
+        if self.units is not None:
+            self._reconcile_units()
+
+    def _reconcile_units(self) -> None:
+        """Fill the `inverter`/`component` lists from `units`, or check them.
+
+        Raises:
+            ValueError: If a unit's inverter or component is missing from an
+                explicitly given `inverter` or `component` list.
+        """
+        assert self.units is not None
+        unit_inverters = [u.inverter for u in self.units]
+        unit_components = [c for u in self.units for c in u.component]
+
+        if self.inverter is None:
+            self.inverter = unit_inverters
+        elif missing := set(unit_inverters) - set(self.inverter):
+            raise ValueError(
+                f"units name inverters {sorted(missing)} that are not in the "
+                f"inverter list {self.inverter}"
+            )
+
+        if self.component is None:
+            self.component = unit_components
+        elif missing := set(unit_components) - set(self.component):
+            raise ValueError(
+                f"units name components {sorted(missing)} that are not in the "
+                f"component list {self.component}"
+            )
+        elif unpaired := set(self.component) - set(unit_components):
+            _logger.warning(
+                "ComponentTypeConfig: components %s are not wired to any "
+                "inverter in units",
+                sorted(unpaired),
             )
 
     def cids(self, metric: str = "") -> list[int]:

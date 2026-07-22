@@ -7,6 +7,7 @@ from frequenz.microgrid_component_graph import ComponentGraphConfig, FormulaOver
 
 from ._graph_generator import ComponentGraphGenerator
 from .config import (
+    ComponentUnitConfig,
     Metadata,
     MicrogridConfig,
     load_configs,
@@ -19,6 +20,7 @@ from .config import (
 __all__ = [
     "ComponentGraphConfig",
     "ComponentGraphGenerator",
+    "ComponentUnitConfig",
     "FormulaOverrides",
     "Metadata",
     "MicrogridConfig",

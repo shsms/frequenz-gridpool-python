@@ -10,7 +10,11 @@ import pytest
 from pytest_mock import MockerFixture
 
 from frequenz.gridpool import MicrogridConfig
-from frequenz.gridpool.config import ComponentTypeConfig, load_configs_from_files
+from frequenz.gridpool.config import (
+    ComponentTypeConfig,
+    ComponentUnitConfig,
+    load_configs_from_files,
+)
 
 VALID_CONFIG: dict[str, dict[str, Any]] = {
     "1": {
@@ -160,3 +164,78 @@ def _assert_optional_field(value: float | None, expected: float) -> None:
     if value is not None:
         if value != expected:
             raise AssertionError(f"Expected {expected}, got {value}")
+
+
+def test_component_type_config_units_fill_id_lists() -> None:
+    """`units` fills the inverter and component lists when they are not given."""
+    config = ComponentTypeConfig(
+        units=[
+            ComponentUnitConfig(inverter=201, component=[301, 302]),
+            ComponentUnitConfig(inverter=202, component=[303]),
+        ]
+    )
+
+    assert config.inverter == [201, 202]
+    assert config.component == [301, 302, 303]
+
+
+def test_component_type_config_units_accept_consistent_id_lists() -> None:
+    """Explicit ID lists that cover every unit are accepted unchanged."""
+    config = ComponentTypeConfig(
+        inverter=[201, 202],
+        component=[301, 302, 303],
+        units=[
+            ComponentUnitConfig(inverter=201, component=[301, 302]),
+            ComponentUnitConfig(inverter=202, component=[303]),
+        ],
+    )
+
+    assert config.inverter == [201, 202]
+    assert config.component == [301, 302, 303]
+
+
+def test_component_type_config_units_reject_unknown_inverter() -> None:
+    """A unit whose inverter is missing from an explicit inverter list is an error."""
+    with pytest.raises(ValueError, match="inverters \\[202\\]"):
+        ComponentTypeConfig(
+            inverter=[201],
+            units=[
+                ComponentUnitConfig(inverter=201, component=[301]),
+                ComponentUnitConfig(inverter=202, component=[302]),
+            ],
+        )
+
+
+def test_component_type_config_units_reject_unknown_component() -> None:
+    """A unit whose component is missing from an explicit component list is an error."""
+    with pytest.raises(ValueError, match="components \\[302\\]"):
+        ComponentTypeConfig(
+            component=[301],
+            units=[ComponentUnitConfig(inverter=201, component=[301, 302])],
+        )
+
+
+def test_load_configs_with_units(mocker: MockerFixture) -> None:
+    """Units given in a TOML file survive loading and keep their pairing."""
+    toml_data = """
+    1.meta.microgrid_id = 1
+    1.meta.name = "Test Grid"
+    1.meta.gid = 1
+    1.ctype.battery.units = [
+        {inverter = 201, component = [301, 302]},
+        {inverter = 202, component = [303]},
+    ]
+    """
+    mock_file = mocker.mock_open(read_data=toml_data.encode("utf-8"))
+    mocker.patch("pathlib.Path.open", mock_file)
+    mocker.patch("pathlib.Path.is_file", mocker.Mock(return_value=True))
+
+    configs = load_configs_from_files(Path("mock_path.toml"))
+
+    battery = configs["1"].ctype["battery"]
+    assert battery.units == [
+        ComponentUnitConfig(inverter=201, component=[301, 302]),
+        ComponentUnitConfig(inverter=202, component=[303]),
+    ]
+    assert battery.inverter == [201, 202]
+    assert battery.component == [301, 302, 303]
