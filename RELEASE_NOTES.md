@@ -12,6 +12,8 @@
 
 * `ComponentTypeConfig` has a new `units` field that keeps the inverter-to-component wiring explicit. Each entry pairs one inverter with the components wired to it, e.g. `1.ctype.battery.units = [{inverter = 201, component = [301, 302]}, {inverter = 202, component = [303]}]` in TOML. Before, consumers had to guess the pairing from the order of the flat `inverter` and `component` lists, which breaks as soon as the counts differ.
 
+* Configs loaded from the Assets API (`load_configs_from_api`, `load_configs`) fill `units` for batteries from the component graph, so the pairing matches the real wiring.
+
 * When `units` is set and `inverter` or `component` is not, the missing list is filled in from the units. Explicitly given lists are checked against the units: a unit naming an unknown inverter or component is an error, and a component not wired to any inverter logs a warning.
 
 * The `generate-config` CLI command writes `units` as an array of inline tables, both when printing and when patching with `--inplace`.

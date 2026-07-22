@@ -167,6 +167,32 @@ def battery_ids(graph: MicrogridComponentGraph) -> list[int]:
     return _ids_of(graph, Battery)
 
 
+def battery_units(graph: MicrogridComponentGraph) -> dict[int, list[int]]:
+    """Return the batteries wired to each battery inverter.
+
+    The result maps every battery inverter ID to the sorted IDs of the
+    batteries downstream of it, keyed in ascending inverter ID order. An
+    inverter with no battery maps to an empty list, so a wiring problem
+    stays visible to the caller.
+    """
+    units: dict[int, list[int]] = {}
+    for inverter in graph.components(matching_types=BatteryInverter):
+        batteries: set[int] = set()
+        seen: set[int] = set()
+        queue = [inverter.id]
+        while queue:
+            for successor in graph.successors(queue.pop()):
+                if int(successor.id) in seen:
+                    continue
+                seen.add(int(successor.id))
+                if isinstance(successor, Battery):
+                    batteries.add(int(successor.id))
+                else:
+                    queue.append(successor.id)
+        units[int(inverter.id)] = sorted(batteries)
+    return dict(sorted(units.items()))
+
+
 def chp_meter_ids(graph: MicrogridComponentGraph) -> list[int]:
     """Return the sorted IDs of all CHP meters."""
     return _meter_ids_where(graph, graph.is_chp_meter)

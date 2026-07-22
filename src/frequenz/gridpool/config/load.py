@@ -16,6 +16,7 @@ from .._graph_generator import (
     battery_ids,
     battery_inverter_ids,
     battery_meter_ids,
+    battery_units,
     chp_ids,
     chp_meter_ids,
     ev_charger_ids,
@@ -26,6 +27,7 @@ from .._graph_generator import (
 )
 from .microgrid import (
     ComponentTypeConfig,
+    ComponentUnitConfig,
     Metadata,
     MicrogridConfig,
     merge_config_maps,
@@ -317,6 +319,11 @@ def _derive_component_configs(
             meter=battery_meter_ids(graph) or None,
             inverter=battery_inverter_ids(graph) or None,
             component=battery_ids(graph) or None,
+            units=[
+                ComponentUnitConfig(inverter=inverter, component=batteries)
+                for inverter, batteries in battery_units(graph).items()
+            ]
+            or None,
             formula=as_formula(graph.battery_formula(None)),
         ),
         "chp": ComponentTypeConfig(

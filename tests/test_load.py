@@ -8,15 +8,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from frequenz.client.assets import AssetsApiClient
 from frequenz.client.assets.electrical_component import (
+    BatteryInverter,
     ComponentConnection,
     GridConnectionPoint,
+    LiIonBattery,
     Meter,
     SolarInverter,
 )
 from frequenz.client.common.microgrid import MicrogridId
 from frequenz.client.common.microgrid.electrical_components import ElectricalComponentId
 
-from frequenz.gridpool import ComponentGraphConfig
+from frequenz.gridpool import ComponentGraphConfig, ComponentUnitConfig
 from frequenz.gridpool._graph_generator import (
     ComponentGraphGenerator,
     MicrogridComponentGraph,
@@ -141,3 +143,47 @@ async def test_derive_component_configs_builds_formulas_and_ids() -> None:
     assert configs["pv"].meter == [2]
     assert configs["grid"].meter == [2, 3]
     assert set(configs) == {"grid", "consumption", "pv"}
+
+
+def _mock_battery_client() -> MagicMock:
+    """Mock an Assets API client: grid 1 -> meter 2 -> inverters 201/202 -> batteries."""
+    client = MagicMock(spec=AssetsApiClient)
+    client.get_microgrid = AsyncMock(return_value=MagicMock(location=None))
+    mid = MicrogridId(10)
+    eid = ElectricalComponentId
+    client.list_microgrid_electrical_components = AsyncMock(
+        return_value=[
+            GridConnectionPoint(id=eid(1), microgrid_id=mid, rated_fuse_current=100),
+            Meter(id=eid(2), microgrid_id=mid),
+            BatteryInverter(id=eid(201), microgrid_id=mid),
+            BatteryInverter(id=eid(202), microgrid_id=mid),
+            LiIonBattery(id=eid(301), microgrid_id=mid),
+            LiIonBattery(id=eid(302), microgrid_id=mid),
+            LiIonBattery(id=eid(303), microgrid_id=mid),
+        ]
+    )
+    client.list_microgrid_electrical_component_connections = AsyncMock(
+        return_value=[
+            ComponentConnection(source=eid(1), destination=eid(2)),
+            ComponentConnection(source=eid(2), destination=eid(201)),
+            ComponentConnection(source=eid(2), destination=eid(202)),
+            ComponentConnection(source=eid(201), destination=eid(301)),
+            ComponentConnection(source=eid(201), destination=eid(302)),
+            ComponentConnection(source=eid(202), destination=eid(303)),
+        ]
+    )
+    return client
+
+
+async def test_load_configs_from_api_pairs_batteries_with_their_inverter() -> None:
+    """A config loaded from the API carries the inverter-to-battery wiring."""
+    configs = await load_configs_from_api(_mock_battery_client(), [10])
+
+    battery = configs["10"].ctype["battery"]
+    assert battery.units == [
+        ComponentUnitConfig(inverter=201, component=[301, 302]),
+        ComponentUnitConfig(inverter=202, component=[303]),
+    ]
+    # The flat lists stay consistent with the units.
+    assert battery.inverter == [201, 202]
+    assert battery.component == [301, 302, 303]
